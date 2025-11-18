@@ -1,16 +1,43 @@
 steps:
-  - group: ":lock_with_ink_pen: Security Audits"
-    key: "audits"
-    notify:
-    - github_commit_status:
-        context: "group status"
+  - label: ":npm: Install dependencies"
+    key: "deps"
+    command: npm install
+    plugins:
+      - artifacts#v1.9.3:
+          upload: "node_modules"
+          compressed: node_modules.tgz
+      - docker#v5.9.0:
+          image: "node:20.11"
 
-    steps:
-      - label: ":brakeman: Brakeman"
-        command: ".buildkite/steps/brakeman"
-      - label: ":bundleaudit: Bundle Audit"
-        command: ".buildkite/steps/bundleaudit"
-      - label: ":yarn: Yarn Audit"
-        command: ".buildkite/steps/yarn"
-      - label: ":yarn: Outdated Check"
-        command: ".buildkite/steps/outdated"
+  - label: ":eslint: Run ESLint"
+    command: "npx eslint"
+    depends_on: "deps"
+    plugins:
+      - artifacts#v1.9.3:
+          download: "node_modules"
+          compressed: node_modules.tgz
+      - docker#v5.9.0:
+          image: "node:20.11"
+
+  - label: ":jest: Run unit tests"
+    depends_on: "deps"
+    command: "npx jest"
+    plugins:
+      - artifacts#v1.9.3:
+          download: "node_modules"
+          compressed: node_modules.tgz
+      - docker#v5.9.0:
+          image: "node:20.11"
+
+  - label: ":cypress: Run cypress tests"
+    depends_on: "deps"
+    commands:
+      - npm install
+      - npm start & npx --yes wait-on http://localhost:8000
+      - npx cypress run
+    plugins:
+      - docker#v5.9.0:
+          image: cypress/browsers:node18.12.0-chrome106-ff106
+          options: --user 1001
+          volumes:
+            - /workdir/node_modules
